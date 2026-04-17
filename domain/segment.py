@@ -92,6 +92,36 @@ def preview_segment(
     }
 
 
+def _excluded_person_ids_from_campaigns(campaign_ids: list[str]) -> set[str]:
+    """Query EMAIL_LOG for all PERSON IDs already emailed in the given campaigns.
+
+    Returns set of Airtable record IDs to exclude from the current filter.
+    Non-fatal on any Airtable error (returns empty set).
+    """
+    if not campaign_ids:
+        return set()
+    try:
+        from airtable import client as ac
+        from airtable.schema import EmailLogField
+        clauses = [f"{{{EmailLogField.CAMPAIGN_ID}}}='{cid}'" for cid in campaign_ids if cid]
+        if not clauses:
+            return set()
+        formula = f"OR({', '.join(clauses)})" if len(clauses) > 1 else clauses[0]
+        import config as cfg
+        api = ac._get_api()
+        table = api.table(cfg.AIRTABLE_BASE_ID, cfg.AIRTABLE_EMAIL_LOG_TABLE)
+        rows = table.all(formula=formula, max_records=10000)
+        excluded: set[str] = set()
+        for r in rows:
+            link = r.get("fields", {}).get(EmailLogField.CONTACT_LINK, [])
+            if isinstance(link, list):
+                excluded.update(link)
+        return excluded
+    except Exception as e:
+        logger.warning(f"_excluded_person_ids_from_campaigns soft-failed: {e}")
+        return set()
+
+
 def recipients_for_filter(
     filter_json: dict[str, Any],
     *,
@@ -103,6 +133,15 @@ def recipients_for_filter(
 
     tables = _source_tables_for(filter_json, source_table)
     rows = airtable_client.fetch_contacts_by_formula(formula, table_names=tables)
+
+    # Anti-duplication: filter out contacts already in specified campaigns
+    exclude_campaigns = filter_json.get("exclude_in_campaign") or []
+    if exclude_campaigns:
+        excluded_ids = _excluded_person_ids_from_campaigns(exclude_campaigns)
+        if excluded_ids:
+            before = len(rows)
+            rows = [r for r in rows if r.get("id") not in excluded_ids]
+            logger.info(f"exclude_in_campaign: removed {before - len(rows)} recipients")
 
     out = []
     for r in rows:

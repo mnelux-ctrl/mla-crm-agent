@@ -82,7 +82,13 @@ def validate_filter(filter_json: dict[str, Any]) -> None:
         set(ALLOWED_LIST_FIELDS)
         | set(ALLOWED_ENUM_FIELDS)
         | set(ALLOWED_BOOL_FIELDS)
-        | {"exclude_do_not_contact", "require_email"}
+        | {
+            "exclude_do_not_contact",
+            "require_email",
+            # Anti-duplication — skip already-contacted recipients
+            "exclude_contacted_within_days",
+            "exclude_in_campaign",
+        }
     )
     unknown = set(filter_json) - allowed_keys
     if unknown:
@@ -119,6 +125,16 @@ def validate_filter(filter_json: dict[str, Any]) -> None:
         if bkey in filter_json and not isinstance(filter_json[bkey], bool):
             raise FilterValidationError(f"Filter key {bkey!r} must be boolean")
 
+    if "exclude_contacted_within_days" in filter_json:
+        v = filter_json["exclude_contacted_within_days"]
+        if not isinstance(v, int) or v < 0 or v > 365:
+            raise FilterValidationError("exclude_contacted_within_days must be int 0-365")
+
+    if "exclude_in_campaign" in filter_json:
+        v = filter_json["exclude_in_campaign"]
+        if not isinstance(v, list) or not all(isinstance(x, str) for x in v):
+            raise FilterValidationError("exclude_in_campaign must be list of campaign_id strings")
+
 
 def filter_to_airtable_formula(filter_json: dict[str, Any]) -> str:
     """Build the final AND(...) formula string. Validates first.
@@ -151,6 +167,16 @@ def filter_to_airtable_formula(filter_json: dict[str, Any]) -> str:
         clauses.append("NOT({do_not_contact})")
     if filter_json.get("require_email", True):
         clauses.append("{email_primary}!=''")
+
+    # Anti-duplication: skip recently-contacted recipients
+    if filter_json.get("exclude_contacted_within_days"):
+        days = int(filter_json["exclude_contacted_within_days"])
+        # last_outbound_at is ISO datetime; empty means never contacted (keep).
+        # DATETIME_DIFF returns days since; keep contacts where diff > N OR field empty.
+        clauses.append(
+            f"OR({{last_outbound_at}}='', "
+            f"DATETIME_DIFF(NOW(), {{last_outbound_at}}, 'days') > {days})"
+        )
 
     if not clauses:
         clauses.append("{email_primary}!=''")
