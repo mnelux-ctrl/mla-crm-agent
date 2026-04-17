@@ -216,10 +216,26 @@ def log_outbound_email(
     if scheduled_send_at:
         fields[EmailLogField.SCHEDULED_SEND_AT] = scheduled_send_at.isoformat()
     try:
-        return _table(config.AIRTABLE_EMAIL_LOG_TABLE).create(fields)
+        # typecast=True lets Airtable coerce select values that may not match the
+        # exact option string ("Sent" / "Approved" might be new options)
+        return _table(config.AIRTABLE_EMAIL_LOG_TABLE).create(fields, typecast=True)
     except Exception as e:
-        logger.warning(f"log_outbound_email failed: {e}")
-        return {}
+        logger.warning(f"log_outbound_email full-schema failed: {e}. Retrying with minimal fields.")
+        # Fallback: write only text fields (no select coercion needed)
+        minimal = {
+            EmailLogField.EMAIL_SUBJECT: subject,
+            EmailLogField.LOG_DATE: sent_at.isoformat(),
+            EmailLogField.EMAIL_FROM: "stefan@mnelux.com",
+            EmailLogField.EMAIL_TO: recipient_email,
+            EmailLogField.CAMPAIGN_ID: campaign_id,
+            EmailLogField.GMAIL_MESSAGE_ID: gmail_message_id,
+            EmailLogField.GMAIL_THREAD_ID: gmail_thread_id,
+        }
+        try:
+            return _table(config.AIRTABLE_EMAIL_LOG_TABLE).create(minimal, typecast=True)
+        except Exception as e2:
+            logger.error(f"log_outbound_email minimal also failed: {e2}")
+            return {}
 
 
 def count_sent_today() -> int:
