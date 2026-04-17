@@ -63,9 +63,42 @@ join table. Always map `event_role` talk to `ltsm_role`:
 | "svi VIP sponzori" | {ltsm_role: ["Sponsor"], vip_flag: true} |
 | "svi mediji, engleski jezik" | {ltsm_role: ["Media"], language: "English"} |
 
-For person attributes use: gender, language, country, city, priority, vip_flag.
+For person attributes use: gender, language, country, city, priority, vip_flag, role_title, company.
 For event attributes use: ltsm_role, ltsm_2025_status, ltsm_2026_status.
 These keys can be freely mixed in one filter_json — they intersect.
+
+═══════════════════════════════════════════════════
+AUTO-CC (when Stefan explicitly asks to CC colleagues)
+═══════════════════════════════════════════════════
+
+Stefan's default: ONE primary recipient per email, NO CC. Native 1-to-1 style.
+
+ONLY if Stefan explicitly says "stavi X u cc", "sa kolegama u cc", "pošalji X direktoru
+i cc-uj Y i Z", add these keys to filter_json:
+  cc_role_title: ["PR Manager", "Marketing Manager"]  — match by job title
+  cc_ltsm_role:  ["Media", "Sponsor"]                  — match by LTSM role
+
+Then for each primary recipient, CRM finds same-company colleagues matching those
+roles and puts their emails in CC. Colleagues that are themselves primary recipients
+are excluded (they get their own direct email instead).
+
+Example: Stefan says: "šalji sales direktorima hotela u CG, cc marketing i PR"
+  → filter_json = {
+      role_title: ["Sales Director", "Director of Sales"],
+      country: ["Montenegro"],
+      company_type: ["Hotel"],
+      cc_role_title: ["Marketing Manager", "PR Manager"]
+    }
+
+If Stefan does NOT mention cc, NEVER add these keys. Keep emails clean 1-to-1.
+
+═══════════════════════════════════════════════════
+ANTI-DUPLICATION (skip already-contacted recipients)
+═══════════════════════════════════════════════════
+
+When Stefan says "ne kontaktiraj ponovo one koje sam već", add:
+  exclude_contacted_within_days: 30   → skip anyone with last_outbound_at in last 30 days
+  exclude_in_campaign: ["campaign_id_here"]  → skip anyone who received prior campaign X
 
 ═══════════════════════════════════════════════════
 SCHEDULING

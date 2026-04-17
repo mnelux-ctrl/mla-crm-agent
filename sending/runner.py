@@ -166,15 +166,34 @@ async def _send_one_recipient_async(campaign_id: str, person_id: str, org_id: st
         logger.info(f"send: skipping campaign {campaign_id} (status={c.status})")
         return
 
+    # Defense-in-depth: verify approval_token still exists in Redis before send.
+    # A stale job (campaign revoked but scheduler fired anyway) would fail at
+    # email-agent anyway, but we cut short to avoid the round-trip.
+    if not c.approval_token or redis_client.lookup_token(c.approval_token, org_id=org_id) != c.campaign_id:
+        logger.error(f"send: approval token for {campaign_id} missing/revoked — aborting")
+        campaign_domain.record_send_failure(campaign_id, person_id, "approval_token_revoked", org_id=org_id)
+        return
+
     recipient = next((r for r in c.recipients if r.get("person_id") == person_id), None)
     if not recipient:
         logger.error(f"send: recipient {person_id} not in campaign {campaign_id}")
+        return
+
+    # Auto-pause check: if this recipient already replied to a prior send in
+    # the campaign, skip. Protects against multi-send embarrassment.
+    if recipient.get("reply_received"):
+        logger.info(f"send: recipient {person_id} already replied — auto-skipping")
+        recipient["status"] = "skipped_replied"
+        campaign_domain.save(c)
         return
 
     # Mark sending
     recipient["status"] = "sending"
     campaign_domain.save(c)
 
+    # Native 1-to-1 B2B email — NO unsubscribe footer. This is a personal
+    # send from Stefan, not a newsletter. If newsletters become a future use
+    # case, opt-in the footer via campaign/template flag.
     try:
         result = await send_now(
             campaign_id=c.campaign_id,
@@ -220,6 +239,7 @@ async def _send_one_recipient_async(campaign_id: str, person_id: str, org_id: st
             c.campaign_id, person_id, gmail_message_id, gmail_thread_id, org_id=org_id
         )
         redis_client.increment_usage(1, org_id=org_id)
+        redis_client.increment_day_send(1, org_id=org_id)  # atomic daily counter
         logger.info(f"Sent {person_id} for campaign {c.campaign_id} ({gmail_message_id})")
 
     except SendNowError as e:

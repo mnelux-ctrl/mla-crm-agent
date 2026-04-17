@@ -103,14 +103,6 @@ if config.SLACK_BOT_TOKEN and config.SLACK_SIGNING_SECRET:
     async def _cancel(ack, body, client):
         await slack_callbacks.handle_cancel(body, ack, client)
 
-    @slack_app.action("crm_edit_template")
-    async def _edit_tmpl(ack, body, client):
-        await slack_callbacks.handle_edit_template(body, ack, client)
-
-    @slack_app.action("crm_edit_list")
-    async def _edit_list(ack, body, client):
-        await slack_callbacks.handle_edit_list(body, ack, client)
-
     # DM / mention handler — Stefan talks to the bot in plain language
     @slack_app.event("message")
     async def _on_message(event, client):

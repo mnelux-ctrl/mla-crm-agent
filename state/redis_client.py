@@ -132,3 +132,34 @@ def increment_usage(n: int, org_id: str | None = None) -> int:
     yyyymm = datetime.utcnow().strftime("%Y-%m")
     client = get_client()
     return client.incrby(k_usage_month(yyyymm, org_id), n)
+
+
+def k_day_send(yyyymmdd: str, org_id: str | None = None) -> str:
+    return f"crm:{_org(org_id)}:day_send:{yyyymmdd}"
+
+
+def increment_day_send(n: int = 1, org_id: str | None = None) -> int:
+    """Atomic day-wide send counter. INCR is atomic in Redis so concurrent
+    sends can't race. Used for global daily-limit enforcement across campaigns.
+
+    Expires the key at the end of the UTC day so it resets automatically.
+    """
+    from datetime import datetime
+    yyyymmdd = datetime.utcnow().strftime("%Y-%m-%d")
+    client = get_client()
+    key = k_day_send(yyyymmdd, org_id)
+    pipe = client.pipeline()
+    pipe.incrby(key, n)
+    pipe.expire(key, 36 * 3600)  # 36h cushion past midnight
+    return pipe.execute()[0]
+
+
+def get_day_send_count(org_id: str | None = None) -> int:
+    """Read today's global send count without incrementing."""
+    from datetime import datetime
+    yyyymmdd = datetime.utcnow().strftime("%Y-%m-%d")
+    raw = get_client().get(k_day_send(yyyymmdd, org_id))
+    try:
+        return int(raw) if raw else 0
+    except (TypeError, ValueError):
+        return 0

@@ -122,6 +122,73 @@ def _excluded_person_ids_from_campaigns(campaign_ids: list[str]) -> set[str]:
         return set()
 
 
+def _resolve_auto_cc(
+    primary_recipients: list[dict],
+    cc_role_title: list[str] | None,
+    cc_ltsm_role: list[str] | None,
+) -> None:
+    """Fill each recipient's `cc` list with same-company colleagues matching the
+    auto-CC filter. Mutates primary_recipients in place.
+
+    Example: primary filter matches sales directors of each hotel. auto-CC
+    filter matches PR + marketing managers. For each sales director, CRM
+    queries all contact tables for same-company colleagues with role_title in
+    ["PR Manager", "Marketing"]; those emails go into cc.
+
+    Colleagues that would duplicate the primary (same email, or already in the
+    primary recipient list for this campaign) are excluded.
+    """
+    cc_role_title = cc_role_title or []
+    cc_ltsm_role = cc_ltsm_role or []
+    if not cc_role_title and not cc_ltsm_role:
+        return
+
+    # Build filter formula for CC candidates
+    clauses = []
+    if cc_role_title:
+        parts = [f"{{role_title}}='{r.replace(chr(39), chr(39)*2)}'" for r in cc_role_title]
+        clauses.append("OR(" + ", ".join(parts) + ")" if len(parts) > 1 else parts[0])
+    if cc_ltsm_role:
+        parts = [f"{{ltsm_role}}='{r.replace(chr(39), chr(39)*2)}'" for r in cc_ltsm_role]
+        clauses.append("OR(" + ", ".join(parts) + ")" if len(parts) > 1 else parts[0])
+    clauses.append("NOT({do_not_contact})")
+    clauses.append("{email_primary}!=''")
+    formula = "AND(" + ", ".join(clauses) + ")"
+
+    # Fetch all possible CC contacts once (cheap — usually 10-50)
+    cc_pool = airtable_client.fetch_contacts_by_formula(formula)
+
+    # Group by company (case-insensitive, trimmed)
+    def normkey(c: str) -> str:
+        return (c or "").strip().lower()
+
+    by_company: dict[str, list[dict]] = {}
+    for r in cc_pool:
+        f = r.get("fields", {})
+        by_company.setdefault(normkey(f.get("company", "")), []).append(r)
+
+    # Track which emails are already primary recipients — don't double-include
+    primary_emails = {r["email"].lower() for r in primary_recipients}
+
+    for primary in primary_recipients:
+        company = normkey(primary.get("company_name", ""))
+        colleagues = by_company.get(company, [])
+        cc = []
+        for col in colleagues:
+            cf = col.get("fields", {})
+            col_email = (cf.get("email_primary") or "").strip().lower()
+            if not col_email:
+                continue
+            if col_email == primary["email"].lower():
+                continue  # skip self
+            if col_email in primary_emails:
+                continue  # they'll get their own email as a primary
+            if col_email in cc:
+                continue  # dedup
+            cc.append(col_email)
+        primary["cc"] = cc
+
+
 def recipients_for_filter(
     filter_json: dict[str, Any],
     *,
@@ -165,7 +232,15 @@ def recipients_for_filter(
             "ltsm_2025_status": f.get(ContactField.LTSM_2025_STATUS, ""),
             "ltsm_2026_status": f.get(ContactField.LTSM_2026_STATUS, ""),
             "vip_flag": bool(f.get(ContactField.VIP_FLAG, False)),
+            "cc": [],  # filled below if cc_role_title / cc_ltsm_role provided
         })
+
+    # Auto-CC: add same-company colleagues to each primary recipient's cc list
+    _resolve_auto_cc(
+        out,
+        cc_role_title=filter_json.get("cc_role_title"),
+        cc_ltsm_role=filter_json.get("cc_ltsm_role"),
+    )
     return out
 
 

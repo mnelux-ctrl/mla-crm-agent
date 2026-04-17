@@ -44,10 +44,14 @@ TOOLS = [
                         "description": (
                             "Ad-hoc filter. Allowed keys: country (list), ltsm_role (list — Exhibitor/Hosted Buyer/Speaker/Media/Sponsor/...), "
                             "ltsm_2025_status (list), ltsm_2026_status (list — Confirmed/Pending/Interested/Declined), "
-                            "company_type (list — Hotel/Resort/DMC/...), partner_type (list), city (list), "
+                            "company_type (list — Hotel/Resort/DMC/...), partner_type (list), city (list), role_title (list), company (list), "
                             "language ('English'/'Montenegrin'/'any'), gender ('Male'/'Female'/'any'), "
                             "vip_flag (bool), priority (list), relationship_stage (list), "
-                            "exclude_do_not_contact (bool, default true). "
+                            "exclude_do_not_contact (bool, default true), "
+                            "exclude_contacted_within_days (int 0-365, anti-dup), "
+                            "exclude_in_campaign (list[str] of campaign_id, anti-dup), "
+                            "cc_role_title (list[str], OPT-IN auto-CC same-company colleagues by title), "
+                            "cc_ltsm_role (list[str], OPT-IN auto-CC by LTSM role). "
                             "Event targeting uses ltsm_role (Exhibitor/Hosted Buyer/Speaker/Media/Sponsor) "
                             "combined with ltsm_2026_status (Confirmed/Pending/Interested) for current year."
                         ),

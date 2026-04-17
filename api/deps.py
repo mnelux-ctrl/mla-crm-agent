@@ -9,12 +9,20 @@ from fastapi import Header, HTTPException, Request
 import config
 
 
+import hmac
+
+
+def _ct_compare(a: str, b: str) -> bool:
+    """Constant-time string compare to prevent timing attacks on token auth."""
+    return hmac.compare_digest(a.encode("utf-8"), b.encode("utf-8"))
+
+
 def verify_crm_api_key(authorization: str = Header(...)) -> str:
     """Public-ish endpoint auth (COO and frontend)."""
     if not authorization.startswith("Bearer "):
         raise HTTPException(401, "Missing bearer token")
     token = authorization[7:].strip()
-    if token != config.CRM_API_KEY:
+    if not _ct_compare(token, config.CRM_API_KEY):
         raise HTTPException(403, "Invalid CRM_API_KEY")
     return token
 
@@ -24,7 +32,7 @@ def verify_crm_internal_key(authorization: str = Header(...)) -> str:
     if not authorization.startswith("Bearer "):
         raise HTTPException(401, "Missing bearer token")
     token = authorization[7:].strip()
-    if token != config.CRM_INTERNAL_KEY:
+    if not _ct_compare(token, config.CRM_INTERNAL_KEY):
         raise HTTPException(403, "Invalid CRM_INTERNAL_KEY")
     return token
 

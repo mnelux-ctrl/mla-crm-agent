@@ -162,9 +162,14 @@ def _airtable_fields(c: Campaign) -> dict[str, Any]:
 # ── Approval token lifecycle ───────────────────────────────────────────────
 
 def approve(campaign_id: str, slack_ts: str, org_id: str | None = None) -> Campaign:
+    """Idempotent approve: if already approved/sending, returns existing campaign
+    without minting a new token or re-scheduling. Protects against double-clicks."""
     c = load(campaign_id, org_id)
     if not c:
         raise LookupError(f"Campaign {campaign_id} not found")
+    if c.status in (CampaignStatus.APPROVED, CampaignStatus.SENDING):
+        logger.info(f"Campaign {campaign_id} already in status={c.status}; idempotent approve noop")
+        return c
     c.transition_to(CampaignStatus.APPROVED)
     c.approval_token = new_approval_token()
     c.approved_slack_ts = slack_ts
@@ -266,14 +271,26 @@ def record_send_failure(
     }, org_id=c.org_id)
 
 
-def increment_reply_count(campaign_id: str, org_id: str | None = None) -> None:
+def increment_reply_count(campaign_id: str, org_id: str | None = None, *, person_id: str | None = None) -> None:
+    """Record that an inbound reply arrived for this campaign.
+
+    If person_id is known, mark that specific recipient as replied so future
+    sends to them in this campaign are auto-skipped (prevents multi-send
+    embarrassment — Stefan's explicit request).
+    """
     c = load(campaign_id, org_id)
     if not c:
         return
     c.reply_count += 1
+    if person_id:
+        for r in c.recipients:
+            if r.get("person_id") == person_id:
+                r["reply_received"] = True
+                break
     save(c)
     redis_client.publish_event(c.campaign_id, {
         "type": "message.reply_received",
         "campaign_id": c.campaign_id,
+        "person_id": person_id,
         "reply_count": c.reply_count,
     }, org_id=c.org_id)

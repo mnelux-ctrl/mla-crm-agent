@@ -23,6 +23,10 @@ def _optional(name: str, default: str = "") -> str:
     return os.getenv(name, default)
 
 
+# Public-facing base URL (for unsubscribe links in emails, SSE, future frontend)
+PUBLIC_BASE_URL = ""   # resolved lazily from env below to avoid forward-ref issues
+
+
 # ── API Security ────────────────────────────────────────────────────────────
 CRM_API_KEY: str = _require("CRM_API_KEY")             # Public-ish: COO and future frontend
 CRM_INTERNAL_KEY: str = _require("CRM_INTERNAL_KEY")   # Service-to-service: email-agent callbacks
@@ -62,7 +66,9 @@ SUPERKNOWLEDGE_API_KEY: str = _optional("SUPERKNOWLEDGE_API_KEY", "")
 
 # ── AI (optional drafting-assist pass) ──────────────────────────────────────
 OPENAI_API_KEY: str = _optional("OPENAI_API_KEY", "")  # optional: used for instructions_override
-OPENAI_MODEL: str = _optional("OPENAI_MODEL", "gpt-5.4")
+# gpt-4.1 is the current production model across MLA (same as coo-agent, email-agent).
+# Override in env if using a different model.
+OPENAI_MODEL: str = _optional("OPENAI_MODEL", "gpt-4.1")
 
 # ── Slack (for single-approval messages to Stefan) ──────────────────────────
 SLACK_BOT_TOKEN: str = _optional("SLACK_BOT_TOKEN", "")
@@ -81,6 +87,7 @@ DEFAULT_ORG_ID: str = _optional("DEFAULT_ORG_ID", "mla")
 PORT: int = int(_optional("PORT", "8005"))   # 5 services already: email, coo, admin, team-manager, superknowledge
 ENV: str = _optional("ENV", "production")
 TIMEZONE: str = _optional("TIMEZONE", "Europe/Podgorica")
+PUBLIC_BASE_URL = _optional("PUBLIC_BASE_URL", "https://mla-crm-agent-production.up.railway.app")
 
 # ── Sender identity (for template {{sender_name}} / {{sender_title}} fallback) ──
 DEFAULT_SENDER_NAME: str = _optional("DEFAULT_SENDER_NAME", "Stefan Stešević")

@@ -92,6 +92,9 @@ def build_approval_blocks(
 
     blocks.append({"type": "divider"})
 
+    # Two buttons only: Approve-all + Cancel. "Edit template/list" removed
+    # because they have no implemented handler — showing them is misleading.
+    # Stefan can re-send a new campaign if he wants edits.
     blocks.append({
         "type": "actions",
         "block_id": f"crm_actions_{campaign.campaign_id}",
@@ -102,18 +105,12 @@ def build_approval_blocks(
                 "text": {"type": "plain_text", "text": f"✅ Approve all {total}"},
                 "action_id": "crm_approve",
                 "value": campaign.campaign_id,
-            },
-            {
-                "type": "button",
-                "text": {"type": "plain_text", "text": "📝 Edit template"},
-                "action_id": "crm_edit_template",
-                "value": campaign.campaign_id,
-            },
-            {
-                "type": "button",
-                "text": {"type": "plain_text", "text": "✂ Edit list"},
-                "action_id": "crm_edit_list",
-                "value": campaign.campaign_id,
+                "confirm": {
+                    "title": {"type": "plain_text", "text": "Pošalji kampanju?"},
+                    "text": {"type": "mrkdwn", "text": f"Šalje se *{total}* emailova. Posle ovoga ne može više da se otkaže ono što je već poslato."},
+                    "confirm": {"type": "plain_text", "text": "Pošalji"},
+                    "deny": {"type": "plain_text", "text": "Još ne"},
+                },
             },
             {
                 "type": "button",
@@ -129,14 +126,28 @@ def build_approval_blocks(
 
 
 def _escape(text: str) -> str:
-    """Minimal Slack mrkdwn escaping."""
+    """Slack mrkdwn-safe escaping.
+
+    Slack uses ~tilde~ *bold* _italic_ `code` ```block``` — so user-supplied
+    content must neutralize those control chars, not just HTML entities.
+    Only & < > require HTML entity form per Slack docs. Everything else uses
+    a zero-width space before the control char so formatting doesn't fire but
+    the character still reads correctly.
+    """
     if not text:
         return ""
-    return (
+    # HTML-entity encoding for the 3 chars Slack interprets as markup escape
+    text = (
         text.replace("&", "&amp;")
             .replace("<", "&lt;")
             .replace(">", "&gt;")
     )
+    # Neutralize mrkdwn formatting chars using zero-width space. Mandatory for
+    # any place user-supplied content is dropped into a section text.
+    ZWSP = "\u200b"
+    for ch in ("*", "_", "~", "`"):
+        text = text.replace(ch, ZWSP + ch)
+    return text
 
 
 async def post_approval_message(campaign: Campaign, previews: list[dict], warnings: list[str]) -> str:

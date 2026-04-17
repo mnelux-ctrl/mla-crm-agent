@@ -62,7 +62,18 @@ class FilterValidationError(ValueError):
 
 
 def _escape(value: str) -> str:
-    """Airtable formula string escaping: double the single quotes."""
+    """Airtable formula string escaping.
+
+    Double single quotes per Airtable spec. Also strip curly braces, backslashes,
+    and control chars that could break formula parsing or inject new clauses.
+    Input that's not a plain string is rejected loudly via type check upstream.
+    """
+    if not isinstance(value, str):
+        raise FilterValidationError(f"Filter values must be strings, got {type(value).__name__}")
+    # Remove characters that have structural meaning in Airtable formulas
+    # or that are simply not expected in contact field values.
+    for bad in ("{", "}", "\\", "\x00", "\n", "\r"):
+        value = value.replace(bad, "")
     return value.replace("'", "''")
 
 
@@ -88,6 +99,11 @@ def validate_filter(filter_json: dict[str, Any]) -> None:
             # Anti-duplication — skip already-contacted recipients
             "exclude_contacted_within_days",
             "exclude_in_campaign",
+            # Auto-CC: add same-company colleagues matching these role_title
+            # values to the CC line of each primary recipient's email.
+            "cc_role_title",
+            # Auto-CC variant: match by LTSM role instead of raw title
+            "cc_ltsm_role",
         }
     )
     unknown = set(filter_json) - allowed_keys
@@ -134,6 +150,12 @@ def validate_filter(filter_json: dict[str, Any]) -> None:
         v = filter_json["exclude_in_campaign"]
         if not isinstance(v, list) or not all(isinstance(x, str) for x in v):
             raise FilterValidationError("exclude_in_campaign must be list of campaign_id strings")
+
+    for key in ("cc_role_title", "cc_ltsm_role"):
+        if key in filter_json:
+            v = filter_json[key]
+            if not isinstance(v, list) or not all(isinstance(x, str) for x in v):
+                raise FilterValidationError(f"{key} must be list of strings")
 
 
 def filter_to_airtable_formula(filter_json: dict[str, Any]) -> str:
