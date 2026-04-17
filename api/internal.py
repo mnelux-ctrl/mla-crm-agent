@@ -46,8 +46,9 @@ async def record_send_result(
 
 
 class ReplyReceivedRequest(BaseModel):
-    campaign_id: str
+    campaign_id: str = ""         # optional — may be empty for bare sequence replies
     person_id: str | None = None
+    recipient_email: str = ""     # email of who replied — used for sequence pause
     thread_id: str
     message_id: str
     received_at: str = ""
@@ -60,11 +61,32 @@ async def reply_received(
 ):
     """email-agent posts here when an inbound message arrives on a CRM campaign thread.
 
-    Also marks the specific recipient as replied so any remaining scheduled
-    sends to them in this campaign are auto-skipped.
+    Two-level auto-pause:
+      1. Campaign-level: mark recipient.reply_received in the Redis campaign
+         state so remaining per-recipient sends in that campaign skip them.
+      2. Sequence-level: if the contact is in an active drip sequence, pause
+         it (sequence_status=paused_reply) so they don't get follow-ups.
     """
-    campaign_domain.increment_reply_count(req.campaign_id, person_id=req.person_id)
-    return envelope_ok({"campaign_id": req.campaign_id, "person_id": req.person_id})
+    # Campaign-level (if this was a campaign, not standalone)
+    if req.campaign_id and not req.campaign_id.startswith("seq:"):
+        campaign_domain.increment_reply_count(req.campaign_id, person_id=req.person_id)
+
+    # Sequence-level pause by email
+    paused_sequence = False
+    if req.recipient_email:
+        try:
+            from domain import sequence as seq_mod
+            res = seq_mod.pause_sequence_for_contact(req.recipient_email, reason="reply")
+            paused_sequence = bool(res.get("ok"))
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"sequence pause on reply failed (non-fatal): {e}")
+
+    return envelope_ok({
+        "campaign_id": req.campaign_id,
+        "person_id": req.person_id,
+        "sequence_paused": paused_sequence,
+    })
 
 
 class BounceRequest(BaseModel):

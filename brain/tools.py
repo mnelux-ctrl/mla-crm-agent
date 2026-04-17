@@ -197,6 +197,86 @@ TOOLS = [
             },
         },
     },
+    # ── SEQUENCE (DRIP) TOOLS ──────────────────────────────────────────
+    {
+        "type": "function",
+        "function": {
+            "name": "list_sequences",
+            "description": (
+                "List all defined sequences (drip campaigns) with step count and step names. "
+                "A sequence is a set of CRM_TEMPLATE rows sharing the same sequence_name, "
+                "ordered by sequence_step. Each step has its own delay_days."
+            ),
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "enroll_in_sequence",
+            "description": (
+                "Enroll contacts matching a filter into a sequence (drip campaign). Each contact "
+                "will start at step 1 (step 1's delay_days after now), then progress automatically "
+                "through follow-ups with the gaps defined in each template. Reply pauses the "
+                "sequence for that contact only. "
+                "Contacts already in an active sequence are skipped by default (new contacts get "
+                "enrolled at step 1; in-flight contacts continue uninterrupted)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "sequence_name": {"type": "string", "description": "Name matching sequence_name on CRM_TEMPLATE rows"},
+                    "segment_name": {"type": "string", "description": "Named CRM_SEGMENT to enroll"},
+                    "filter_json": {"type": "object", "description": "Ad-hoc filter (same keys as preview_segment)"},
+                    "skip_already_enrolled": {"type": "boolean", "description": "Default true — don't interrupt in-flight drips"},
+                },
+                "required": ["sequence_name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "sequence_overview",
+            "description": "Summary of a sequence: how many contacts are at each step, how many paused/completed/cancelled.",
+            "parameters": {
+                "type": "object",
+                "properties": {"sequence_name": {"type": "string"}},
+                "required": ["sequence_name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "pause_sequence_for_contact",
+            "description": "Pause a specific contact's sequence (use when Stefan says 'skini X iz sekvence' / 'pauziraj X'). Reason='manual' marks paused_manual; reason='reply' is used by automatic reply handler.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "email": {"type": "string"},
+                    "reason": {"type": "string", "enum": ["manual", "reply"], "default": "manual"},
+                },
+                "required": ["email"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "resume_sequence_for_contact",
+            "description": "Resume a paused contact's sequence (moves status back to active).",
+            "parameters": {"type": "object", "properties": {"email": {"type": "string"}}, "required": ["email"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "cancel_sequence_for_contact",
+            "description": "Fully cancel a contact's sequence (clears active_sequence). They won't receive any more steps.",
+            "parameters": {"type": "object", "properties": {"email": {"type": "string"}}, "required": ["email"]},
+        },
+    },
     {
         "type": "function",
         "function": {

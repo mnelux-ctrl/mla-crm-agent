@@ -403,7 +403,23 @@ async def verify_token(
     _auth: str = Depends(verify_crm_internal_key),
     org_id: str = Depends(get_org_id),
 ):
-    """Called by email-agent BEFORE each send to confirm approval is still valid."""
+    """Called by email-agent BEFORE each send to confirm approval is still valid.
+
+    Supports two forms:
+      - campaign_id='<uuid>'  → regular one-shot campaign, token in Redis
+      - campaign_id='seq:<sequence_name>:<step>'  → sequence step, token minted
+        once per sequence at first enrollment (persistent)
+    """
+    if campaign_id.startswith("seq:"):
+        from domain.sequence import verify_sequence_token
+        if verify_sequence_token(campaign_id, token):
+            return {
+                "valid": True,
+                "campaign_status": "sequence_active",
+                "approved_by": "auto_sequence",
+            }
+        return {"valid": False}
+
     ok = campaign_domain.verify_token(campaign_id, token, org_id=org_id)
     if not ok:
         return {"valid": False}

@@ -31,6 +31,7 @@ from api.coo import router as coo_router
 from api.internal import router as internal_router
 from api.debug import router as debug_router
 from sending.runner import get_scheduler, shutdown_scheduler
+from sending.sequence_ticker import start_sequence_ticker
 from slack import callbacks as slack_callbacks
 from slack import dm_handler as slack_dm
 from state.redis_client import ping as redis_ping
@@ -53,8 +54,12 @@ async def lifespan(app: FastAPI):
         logger.info("Redis connected")
     else:
         logger.warning("Redis ping failed — campaign state will fail")
-    # Start APScheduler
+    # Start APScheduler + register sequence ticker
     get_scheduler()
+    try:
+        start_sequence_ticker()
+    except Exception as e:
+        logger.warning(f"Sequence ticker failed to start (non-fatal): {e}")
     yield
     logger.info("mla-crm-agent shutting down...")
     shutdown_scheduler()

@@ -51,6 +51,13 @@ class ContactField:
     LAST_OUTBOUND_THREAD_ID = "last_outbound_thread_id"
     LAST_OUTBOUND_AT = "last_outbound_at"
 
+    # Sequence state (per contact, single active sequence)
+    ACTIVE_SEQUENCE = "active_sequence"
+    SEQUENCE_STEP = "sequence_step"
+    SEQUENCE_NEXT_AT = "sequence_next_at"
+    SEQUENCE_STATUS = "sequence_status"
+    LAST_SENT_TEMPLATE = "last_sent_template"
+
 
 # The 5 outreach tables. Friends & Family intentionally excluded (not outreach).
 DEFAULT_CONTACT_TABLES: tuple[str, ...] = (
@@ -102,6 +109,19 @@ class TemplateField:
     PARTNER_CATEGORY = "partner_category"
     IS_ARCHIVED = "is_archived"
     ORG_ID = "org_id"
+
+    # Sequence metadata — templates sharing sequence_name form one drip campaign
+    SEQUENCE_NAME = "sequence_name"
+    SEQUENCE_STEP = "sequence_step"
+    SEQUENCE_DELAY_DAYS = "sequence_delay_days"
+
+
+class SequenceStatus:
+    ACTIVE = "active"
+    PAUSED_REPLY = "paused_reply"       # contact replied → won't auto-progress
+    PAUSED_MANUAL = "paused_manual"     # Stefan manually paused
+    COMPLETED = "completed"             # ran through all steps
+    CANCELLED = "cancelled"             # Stefan cancelled mid-sequence
 
 
 # ── CRM_SEGMENT ─────────────────────────────────────────────────────────────

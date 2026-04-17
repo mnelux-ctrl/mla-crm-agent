@@ -233,6 +233,33 @@ async def _execute_tool(name: str, args: dict, *, channel: str, org_id: str) -> 
         if name == "recall_knowledge":
             return await _recall_knowledge(args)
 
+        # ── Sequence tools ───────────────────────────────────────────
+        if name == "list_sequences":
+            from domain import sequence as seq_mod
+            return {"ok": True, "sequences": seq_mod.list_sequences()}
+
+        if name == "enroll_in_sequence":
+            return await _enroll_in_sequence(args)
+
+        if name == "sequence_overview":
+            from domain import sequence as seq_mod
+            return seq_mod.sequence_overview(args.get("sequence_name", ""))
+
+        if name == "pause_sequence_for_contact":
+            from domain import sequence as seq_mod
+            return seq_mod.pause_sequence_for_contact(
+                args.get("email", ""),
+                reason=args.get("reason", "manual"),
+            )
+
+        if name == "resume_sequence_for_contact":
+            from domain import sequence as seq_mod
+            return seq_mod.resume_sequence_for_contact(args.get("email", ""))
+
+        if name == "cancel_sequence_for_contact":
+            from domain import sequence as seq_mod
+            return seq_mod.cancel_sequence_for_contact(args.get("email", ""))
+
         return {"ok": False, "error": f"Unknown tool: {name}"}
 
     except Exception as e:
@@ -392,6 +419,32 @@ def _cancel_campaign(args: dict, org_id: str) -> dict:
     campaign_domain.save(c)
     campaign_domain.revoke_token(c.campaign_id, org_id=org_id)
     return {"ok": True, "removed_jobs": removed, "status": c.status}
+
+
+async def _enroll_in_sequence(args: dict) -> dict:
+    """Enroll contacts from a filter/segment into a sequence."""
+    from domain import sequence as seq_mod
+    sequence_name = args.get("sequence_name", "")
+    if not sequence_name:
+        return {"ok": False, "error": "sequence_name required"}
+
+    filter_json = _resolve_filter(args)
+    if not filter_json:
+        return {"ok": False, "error": "segment_name or filter_json required"}
+
+    try:
+        contacts = segment_domain.recipients_for_filter(filter_json)
+    except FilterValidationError as e:
+        return {"ok": False, "error": str(e)}
+
+    if not contacts:
+        return {"ok": False, "error": "Segment matched 0 recipients"}
+
+    result = seq_mod.enroll_in_sequence(
+        contacts, sequence_name,
+        skip_already_enrolled=args.get("skip_already_enrolled", True),
+    )
+    return {"ok": True, **result}
 
 
 async def _delegate_to_admin(args: dict) -> dict:

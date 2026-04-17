@@ -232,6 +232,19 @@ async def _send_one_recipient_async(campaign_id: str, person_id: str, org_id: st
                     gmail_thread_id,
                     datetime.now(timezone.utc),
                 )
+                # Also write last_sent_template for audit (campaign name ≈ template usage)
+                try:
+                    from airtable.schema import ContactField
+                    api = airtable_client._get_api()
+                    import config as _cfg
+                    tbl = api.table(_cfg.AIRTABLE_BASE_ID, source_table)
+                    tbl.update(
+                        recipient["person_id"],
+                        {ContactField.LAST_SENT_TEMPLATE: c.template_name or c.name},
+                        typecast=True,
+                    )
+                except Exception:
+                    pass
         except Exception:
             pass  # already soft-failed inside
 
