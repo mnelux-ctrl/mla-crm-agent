@@ -201,10 +201,15 @@ def enroll_in_sequence(
         return {"sequence_missing": 1, "enrolled": 0, "skipped_already_in": 0, "skipped_missing_table": 0}
 
     now = start_at or datetime.now(timezone.utc)
-    # Compute when step 1 should fire (step 1's delay is usually 0)
+    # Compute when step 1 should fire (step 1's delay is usually 0).
+    # If delay=0 we need next_at strictly < NOW so IS_BEFORE matches — add a
+    # small negative offset so the next tick picks it up immediately.
     first_step = steps[0]
     first_delay = int(first_step.get("sequence_delay_days", 0) or 0)
-    next_at = now + timedelta(days=first_delay)
+    if first_delay == 0:
+        next_at = now - timedelta(minutes=1)
+    else:
+        next_at = now + timedelta(days=first_delay)
 
     enrolled = 0
     skipped_already_in = 0
