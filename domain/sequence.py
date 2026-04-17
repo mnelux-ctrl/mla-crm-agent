@@ -343,12 +343,14 @@ async def tick_due_steps() -> dict[str, int]:
     now = datetime.now(timezone.utc)
     now_iso = now.isoformat()
 
-    # Query all tables for due contacts
+    # Query all tables for due contacts.
+    # Use DATETIME_DIFF > 0 instead of IS_BEFORE because IS_BEFORE is strict
+    # and fails for datetime values that are equal to NOW within 1 second.
     clauses = [
         f"{{{ContactField.SEQUENCE_STATUS}}}='{SequenceStatus.ACTIVE}'",
         f"{{{ContactField.ACTIVE_SEQUENCE}}}!=''",
         f"{{{ContactField.SEQUENCE_NEXT_AT}}}!=''",
-        f"IS_BEFORE({{{ContactField.SEQUENCE_NEXT_AT}}}, NOW())",
+        f"DATETIME_DIFF(NOW(), {{{ContactField.SEQUENCE_NEXT_AT}}}, 'seconds') > 0",
         f"NOT({{{ContactField.DO_NOT_CONTACT}}})",
         f"{{{ContactField.EMAIL_PRIMARY}}}!=''",
     ]
