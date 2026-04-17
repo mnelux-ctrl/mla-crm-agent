@@ -30,6 +30,7 @@ from api.templates import router as templates_router
 from api.coo import router as coo_router
 from api.internal import router as internal_router
 from api.debug import router as debug_router
+from api.sequences import router as sequences_router
 from sending.runner import get_scheduler, shutdown_scheduler
 from sending.sequence_ticker import start_sequence_ticker
 from slack import callbacks as slack_callbacks
@@ -90,6 +91,7 @@ app.include_router(templates_router)
 app.include_router(coo_router)
 app.include_router(internal_router)
 app.include_router(debug_router)
+app.include_router(sequences_router)
 
 
 # ── Slack Bolt handlers (interactivity: button clicks) ──────────────────────
