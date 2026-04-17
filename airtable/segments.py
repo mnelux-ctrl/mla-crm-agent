@@ -40,6 +40,9 @@ ALLOWED_LIST_FIELDS: dict[str, str] = {
     "ltsm_2026_status": "ltsm_2026_status",
     "relationship_stage": "relationship_stage",
     "priority":         "priority",
+    "role_title":       "role_title",     # free-text job title
+    "company":          "company",        # company name (free-text across all tables)
+    "city":             "city",
 }
 
 ALLOWED_ENUM_FIELDS: dict[str, tuple[str, tuple[str, ...]]] = {
