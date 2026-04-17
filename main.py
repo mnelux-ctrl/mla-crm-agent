@@ -31,6 +31,7 @@ from api.coo import router as coo_router
 from api.internal import router as internal_router
 from sending.runner import get_scheduler, shutdown_scheduler
 from slack import callbacks as slack_callbacks
+from slack import dm_handler as slack_dm
 from state.redis_client import ping as redis_ping
 
 logging.basicConfig(
@@ -108,13 +109,28 @@ if config.SLACK_BOT_TOKEN and config.SLACK_SIGNING_SECRET:
     async def _edit_list(ack, body, client):
         await slack_callbacks.handle_edit_list(body, ack, client)
 
+    # DM / mention handler — Stefan talks to the bot in plain language
+    @slack_app.event("message")
+    async def _on_message(event, client):
+        # Only handle direct messages (channel_type='im')
+        if event.get("channel_type") == "im":
+            await slack_dm.handle_dm(event, client)
+
+    @slack_app.event("app_mention")
+    async def _on_mention(event, client):
+        await slack_dm.handle_dm(event, client)
+
     slack_handler = AsyncSlackRequestHandler(slack_app)
 
     @app.post("/slack/interactions")
     async def slack_interactions(req: Request):
         return await slack_handler.handle(req)
 
-    logger.info("Slack Bolt handlers registered")
+    @app.post("/slack/events")
+    async def slack_events(req: Request):
+        return await slack_handler.handle(req)
+
+    logger.info("Slack Bolt handlers registered (DM + interactions + events)")
 else:
     logger.warning(
         "SLACK_BOT_TOKEN / SLACK_SIGNING_SECRET not set — Slack interactivity disabled. "
