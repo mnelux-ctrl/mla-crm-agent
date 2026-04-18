@@ -7,9 +7,11 @@ same domain functions the HTTP API exposes — so a Slack command is equivalent
 to an API call on the back end.
 
 SuperKnowledge integration: BEFORE every Stefan message and BEFORE every
-campaign body tweak, we recall Stefan's standing preferences (language, tone,
-signature rules, forbidden phrases) and inject them into the system prompt.
-Same pattern as Email Agent — closes the feedback loop across all agents.
+campaign body tweak, we recall Stefan's standing rules. Rules are SCOPED —
+each entry carries metadata.applies_to listing which agents it applies to.
+CRM only picks up rules where applies_to contains "crm" or "all". Other
+agents' rules are filtered out so CRM keeps its own focus (campaigns,
+segments, bulk outreach).
 """
 
 from __future__ import annotations
@@ -19,6 +21,8 @@ import logging
 from typing import Any
 
 import httpx
+
+AGENT_NAME = "crm"
 from openai import OpenAI
 from tenacity import (
     retry,
@@ -64,11 +68,33 @@ def _get_openai() -> OpenAI:
 # SuperKnowledge recall — fetch Stefan's standing preferences before reasoning
 # ─────────────────────────────────────────────────────────────────────────────
 
-async def _recall_stefan_rules(topic_hint: str = "") -> str:
-    """Async SK recall. Returns formatted rules block or ''.
+def _classify_entry(item: dict) -> str:
+    """Classify SK entry as 'bind', 'aware', or 'skip'.
 
-    Non-fatal: if SK is down or not configured, returns empty string and the
-    CRM proceeds with SYSTEM_PROMPT alone (previous behaviour).
+    - applies_to includes CRM or "all" → 'bind'
+    - applies_to targets OTHER agents → 'aware' (context only)
+    - no applies_to → 'bind' (legacy / backward compat)
+    """
+    meta = (item or {}).get("metadata") or {}
+    audience = meta.get("applies_to")
+    if not audience:
+        return "bind"
+    if isinstance(audience, str):
+        audience = [audience]
+    audience = [str(a).lower() for a in audience]
+    if "all" in audience or AGENT_NAME in audience:
+        return "bind"
+    return "aware"
+
+
+async def _recall_stefan_rules(topic_hint: str = "") -> str:
+    """Async SK recall. Returns binding + awareness sections.
+
+    Per Stefan: CRM APPLIES only rules scoped to it or to "all", but is
+    AWARE of rules given to other agents so campaigns stay consistent
+    with what Email/Admin/Team Manager are doing.
+
+    Non-fatal.
     """
     url = (getattr(config, "SUPERKNOWLEDGE_URL", "") or "").rstrip("/")
     key = getattr(config, "SUPERKNOWLEDGE_API_KEY", "") or ""
@@ -80,7 +106,7 @@ async def _recall_stefan_rules(topic_hint: str = "") -> str:
         "include_graph": False,
         "include_similar": True,
         "depth": 0,
-        "max_results": 10,
+        "max_results": 20,
     }
     headers = {"Authorization": f"Bearer {key}"}
     try:
@@ -91,22 +117,41 @@ async def _recall_stefan_rules(topic_hint: str = "") -> str:
         prefs = r.json() or {}
         if prefs.get("error"):
             return ""
-        entries = []
+        binding, aware = [], []
         for k in ("knowledge_entries", "entries", "results"):
             items = prefs.get(k) or []
             for item in items:
-                if isinstance(item, dict):
-                    text = item.get("content") or item.get("text") or ""
-                    source = item.get("source_agent", "")
-                    if text and ("stefan" in str(source).lower() or not source):
-                        entries.append(text[:300])
-        if not entries:
+                if not isinstance(item, dict):
+                    continue
+                text = item.get("content") or item.get("text") or ""
+                source = item.get("source_agent", "")
+                if not text:
+                    continue
+                if not ("stefan" in str(source).lower() or not source):
+                    continue
+                cls = _classify_entry(item)
+                if cls == "bind":
+                    binding.append(text[:300])
+                elif cls == "aware":
+                    meta = item.get("metadata") or {}
+                    aud = meta.get("applies_to") or []
+                    aware.append(f"[for {','.join(str(a) for a in aud)}] {text[:250]}")
+        if not binding and not aware:
             return ""
-        lines = "\n".join(f"  - {e}" for e in entries[:8])
-        return (
-            "\n\nSTEFAN'S STANDING RULES (from SuperKnowledge — apply to every reply, campaign, tweak):\n"
-            + lines + "\n"
-        )
+        out = []
+        if binding:
+            out.append(
+                "\n\nSTEFAN'S STANDING RULES FOR CRM AGENT "
+                "(from SuperKnowledge — apply to every reply, campaign, tweak):\n"
+                + "\n".join(f"  - {e}" for e in binding[:8])
+            )
+        if aware:
+            out.append(
+                "\n\nAWARENESS — rules Stefan gave to OTHER agents "
+                "(do NOT apply, but know the context to stay consistent):\n"
+                + "\n".join(f"  · {e}" for e in aware[:5])
+            )
+        return "\n".join(out) + "\n"
     except Exception as e:
         logger.warning(f"SuperKnowledge recall failed (non-fatal): {e}")
         return ""
