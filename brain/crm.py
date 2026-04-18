@@ -693,7 +693,7 @@ def _tweak_body(body: str, instructions: str) -> str:
                 {"role": "system", "content": system_msg},
                 {"role": "user", "content": f"Original:\n\n{body}\n\nInstructions:\n{instructions}"},
             ],
-            max_tokens=1500,
+            max_completion_tokens=1500,
         )
         return (resp.choices[0].message.content or body).strip()
     except Exception as e:

@@ -109,7 +109,7 @@ def _maybe_llm_tweak(body: str, instructions: str) -> str:
                 )},
                 {"role": "user", "content": f"Original body:\n\n{body}\n\nInstructions:\n{instructions}"},
             ],
-            max_tokens=1500,
+            max_completion_tokens=1500,
         )
         new_body = resp.choices[0].message.content or body
         return new_body.strip()
