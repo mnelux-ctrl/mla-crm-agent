@@ -66,9 +66,9 @@ SUPERKNOWLEDGE_API_KEY: str = _optional("SUPERKNOWLEDGE_API_KEY", "")
 
 # ── AI (optional drafting-assist pass) ──────────────────────────────────────
 OPENAI_API_KEY: str = _optional("OPENAI_API_KEY", "")  # optional: used for instructions_override
-# gpt-4.1 is the current production model across MLA (same as coo-agent, email-agent).
+# gpt-5.4 is the current production model across MLA (same as coo-agent, email-agent).
 # Override in env if using a different model.
-OPENAI_MODEL: str = _optional("OPENAI_MODEL", "gpt-4.1")
+OPENAI_MODEL: str = _optional("OPENAI_MODEL", "gpt-5.4")
 
 # ── Slack (for single-approval messages to Stefan) ──────────────────────────
 SLACK_BOT_TOKEN: str = _optional("SLACK_BOT_TOKEN", "")
