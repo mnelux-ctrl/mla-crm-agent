@@ -95,6 +95,9 @@ DEFAULT_SENDER_TITLE: str = _optional("DEFAULT_SENDER_TITLE", "Founder & Executi
 DEFAULT_EVENT_NAME: str = _optional("DEFAULT_EVENT_NAME", "LTSM 2026")
 
 
+
+# ── Agent identity (for tm_relay) ─────────────────────────
+AGENT_NAME: str = _optional("AGENT_NAME", "crm")
 def validate_all() -> None:
     required = [
         "CRM_API_KEY", "CRM_INTERNAL_KEY",
