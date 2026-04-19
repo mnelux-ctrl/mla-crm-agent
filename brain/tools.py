@@ -9,7 +9,13 @@ the dispatch runs locally inside this service (no HTTP hop).
 
 from __future__ import annotations
 
+# Imported here so the shared doc_reader tool schema is always in sync with
+# the service contract — never forked.
+from shared.doc_reader import OPENAI_TOOL_SCHEMA as _READ_DOCUMENT_TOOL
+
 TOOLS = [
+    # ── DOCUMENT READING (shared MLA service) ────────────────────────────────
+    _READ_DOCUMENT_TOOL,
     {
         "type": "function",
         "function": {

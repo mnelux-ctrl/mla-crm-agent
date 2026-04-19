@@ -34,10 +34,53 @@ async def handle_dm(event: dict, client) -> None:
         return
 
     text = (event.get("text") or "").strip()
+    files = event.get("files", []) or []
+    channel = event.get("channel", "")
+
+    # ── Auto-extract text from non-voice attachments ─────────────────────────
+    # When Stefan drops a PDF / DOCX / XLSX / PPTX / image into the DM, pull
+    # its content through mla-doc-reader and prepend to `text` so the CRM
+    # brain sees the attachment body as conversation context.
+    non_voice_files = [
+        f for f in files
+        if "audio" not in (f.get("mimetype") or "").lower()
+        and f.get("subtype", "") != "slack_audio"
+        and f.get("mode") != "voice"
+    ]
+    if non_voice_files:
+        try:
+            import asyncio
+            from shared.doc_reader import read_slack_file
+            bot_token = getattr(config, "SLACK_BOT_TOKEN", "") or ""
+            doc_blocks: list[str] = []
+            for f in non_voice_files:
+                name = f.get("name", "") or f.get("title", "") or "(unnamed file)"
+                try:
+                    res = await asyncio.to_thread(
+                        read_slack_file, f, bot_token,
+                    )
+                except Exception as e:
+                    logger.warning(f"doc-reader call failed for {name}: {e}")
+                    res = {"ok": False, "error": str(e)}
+                if res.get("ok"):
+                    body = (res.get("text") or "").strip()
+                    if body:
+                        doc_blocks.append(
+                            f"--- Attached file: {name} ({res.get('char_count',0)} chars) ---\n{body}"
+                        )
+                    else:
+                        doc_blocks.append(f"--- Attached file: {name} (no text extracted) ---")
+                else:
+                    err = res.get("error", "unknown")
+                    doc_blocks.append(f"--- Attached file: {name} (doc-reader error: {err[:200]}) ---")
+            if doc_blocks:
+                prefix = "\n\n".join(doc_blocks)
+                text = f"{prefix}\n\n{text}".strip() if text else prefix
+        except Exception as e:
+            logger.warning(f"shared.doc_reader unavailable: {e}")
+
     if not text:
         return
-
-    channel = event.get("channel", "")
 
     # Thinking indicator
     try:

@@ -282,6 +282,31 @@ async def process_message(user_message: str, channel: str, org_id: str = "mla") 
 async def _execute_tool(name: str, args: dict, *, channel: str, org_id: str) -> dict:
     """Run a tool locally and return its result dict."""
     try:
+        if name == "read_document":
+            # Read any document URL (Google Doc, Drive file, Slack file,
+            # public HTTPS) via the centralised mla-doc-reader service.
+            try:
+                import asyncio
+                from shared.doc_reader import read_document_url
+                bot_token = getattr(config, "SLACK_BOT_TOKEN", "") or ""
+                res = await asyncio.to_thread(
+                    read_document_url,
+                    args["url"],
+                    slack_bot_token=bot_token or None,
+                )
+            except Exception as e:
+                return {"ok": False, "error": f"read_document raised: {e}"}
+            if not res.get("ok"):
+                return {"ok": False, "error": res.get("error") or "unknown doc-reader error"}
+            return {
+                "ok": True,
+                "source": res.get("source"),
+                "filename": res.get("filename"),
+                "char_count": res.get("char_count"),
+                "truncated": res.get("truncated"),
+                "text": res.get("text", ""),
+            }
+
         if name == "list_templates":
             rows = template_domain.list_templates()
             return {"ok": True, "templates": [
